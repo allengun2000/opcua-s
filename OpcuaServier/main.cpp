@@ -4,11 +4,15 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/core.hpp>
 #include <iostream>
+#include <windows.h>
 using namespace std;
 using namespace cv;
 static UA_NodeId pointTypeId;
 Mat img;
-#define frame_pixel 61542
+cv::VideoCapture cap(0);
+cv::Mat frame;
+//Hi
+#define frame_pixel 307200*3
 static void
 addVariableTypeframe(UA_Server *server) {
 	UA_VariableTypeAttributes vtAttr = UA_VariableTypeAttributes_default;
@@ -110,8 +114,9 @@ writeVariable(UA_Server *server) {
 	UA_NodeId frameNodeId = UA_NODEID_STRING(1, "frame Variable");
 	UA_Variant_init(&myVar);
 	UA_Byte picture[frame_pixel];
-
-	
+	cap >> img;
+	imshow("Display window", img);
+	waitKey(1);
 	UA_Variant_setArray(&myVar , img.data, frame_pixel, &UA_TYPES[UA_TYPES_BYTE]);
 	UA_Server_writeValue(server, frameNodeId, myVar);
 
@@ -142,15 +147,14 @@ static void stopHandler(int sign) {
 
 int main(void) {
 	
-
 		 img = imread("D:\\golfcar.jpg", CV_LOAD_IMAGE_GRAYSCALE);
+		 cap >> img;
 
 			namedWindow("Display window", WINDOW_AUTOSIZE);
 			imshow("Display window", img);
-
 			waitKey(1);
 			
-			cout << img.cols <<endl<< img.rows<<endl << img.cols*img.rows<<endl << (UA_Byte)img.data[23];
+			cout << img.cols <<endl<< img.rows<<endl << img.cols*img.rows<<endl;
 	
 	
 	signal(SIGINT, stopHandler);
@@ -171,7 +175,7 @@ int main(void) {
 
 	if (retval != UA_STATUSCODE_GOOD)
 		goto cleanup;
-
+	int count = 0;
 	while (running) {
 		/* timeout is the maximum possible delay (in millisec) until the next
 		_iterate call. Otherwise, the server might miss an internal timeout
@@ -181,13 +185,12 @@ int main(void) {
 		* if needed, the select with timeout on the multicast socket server->mdnsSocket (see example in mdnsd library)
 		*/
 		UA_UInt16 timeout = UA_Server_run_iterate(server, waitInternal);
+		count++;
+		//if(count%85000==0)
 		writeVariable(server);
-		/* Now we can use the max timeout to do something else. In this case, we
-		just sleep. (select is used as a platform-independent sleep
-		function.) */
 		
 		struct timeval tv;
-		tv.tv_sec = 10;
+		tv.tv_sec = 0;
 		tv.tv_usec = timeout * 1000;
 		select(0, NULL, NULL, NULL, &tv);
 	}
