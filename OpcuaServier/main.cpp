@@ -5,13 +5,13 @@
 #include <opencv2/core/core.hpp>
 #include <iostream>
 #include <windows.h>
+#include <thread>
 using namespace std;
 using namespace cv;
 static UA_NodeId pointTypeId;
 Mat img;
 cv::VideoCapture cap(0);
 cv::Mat frame;
-//Hi
 #define frame_pixel 307200*3
 static void
 addVariableTypeframe(UA_Server *server) {
@@ -35,6 +35,7 @@ addVariableTypeframe(UA_Server *server) {
 		vtAttr, NULL, &pointTypeId);
 }
 UA_Int32 myInteger = 42;
+UA_Int32 gonum = 90;
 static void
 addVariable(UA_Server *server) {
 	/* Define the attribute of the myInteger variable node */
@@ -55,6 +56,21 @@ addVariable(UA_Server *server) {
 	UA_Server_addVariableNode(server, myIntegerNodeId, parentNodeId,
 		parentReferenceNodeId, myIntegerName,
 		UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE), attr, NULL, NULL);
+////////////////////////////////////////////////////////////////////////////////////////////
+	UA_VariableAttributes qttr = UA_VariableAttributes_default;
+
+	UA_Variant_setScalar(&qttr.value, &gonum, &UA_TYPES[UA_TYPES_INT32]);
+	qttr.description = UA_LOCALIZEDTEXT("en-US", "go");
+	qttr.displayName = UA_LOCALIZEDTEXT("en-US", "go");
+	qttr.dataType = UA_TYPES[UA_TYPES_INT32].typeId;
+	qttr.accessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+
+	/* Add the variable node to the information model */
+	UA_NodeId goId = UA_NODEID_STRING(1, "go");
+	UA_QualifiedName goName = UA_QUALIFIEDNAME(1, "go");
+	UA_Server_addVariableNode(server, goId, parentNodeId,
+		parentReferenceNodeId, goName,
+		UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE), qttr, NULL, NULL);
 /////////////////////////////////////////////////////////////////////////
 	UA_VariableAttributes vAttr = UA_VariableAttributes_default;
 	vAttr.dataType = UA_TYPES[UA_TYPES_BYTE].typeId;
@@ -109,7 +125,6 @@ writeVariable(UA_Server *server) {
 	wv.value.hasValue = true;
 	UA_Server_write(server, &wv);
 
-
 	///////////////////////////////////////////////////////////////////////////
 	UA_NodeId frameNodeId = UA_NODEID_STRING(1, "frame Variable");
 	UA_Variant_init(&myVar);
@@ -144,19 +159,9 @@ static void stopHandler(int sign) {
 	UA_LOG_INFO(UA_Log_Stdout, UA_LOGCATEGORY_SERVER, "received ctrl-c");
 	running = false;
 }
-
-int main(void) {
-	
-		 img = imread("D:\\golfcar.jpg", CV_LOAD_IMAGE_GRAYSCALE);
-		 cap >> img;
-
-			namedWindow("Display window", WINDOW_AUTOSIZE);
-			imshow("Display window", img);
-			waitKey(1);
-			
-			cout << img.cols <<endl<< img.rows<<endl << img.cols*img.rows<<endl;
-	
-	
+void network() {
+	cap >> img;
+	namedWindow("Display window", WINDOW_AUTOSIZE);
 	signal(SIGINT, stopHandler);
 	signal(SIGTERM, stopHandler);
 
@@ -164,41 +169,37 @@ int main(void) {
 	UA_Server *server = UA_Server_new(config);
 	addVariableTypeframe(server);
 	addVariable(server);
-	
 	writeVariable(server);
 	UA_Boolean waitInternal = false;
-
 	UA_StatusCode retval = UA_Server_run_startup(server);
-
-	//UA_StatusCode retval = UA_Server_run(server, &running);
-
-
-	if (retval != UA_STATUSCODE_GOOD)
-		goto cleanup;
+	if (retval != UA_STATUSCODE_GOOD) {
+		UA_Server_delete(server);
+		UA_ServerConfig_delete(config);
+		return;
+	}
 	int count = 0;
 	while (running) {
-		/* timeout is the maximum possible delay (in millisec) until the next
-		_iterate call. Otherwise, the server might miss an internal timeout
-		or cannot react to messages with the promised responsiveness. */
-		/* If multicast discovery server is enabled, the timeout does not not consider new input data (requests) on the mDNS socket.
-		* It will be handled on the next call, which may be too late for requesting clients.
-		* if needed, the select with timeout on the multicast socket server->mdnsSocket (see example in mdnsd library)
-		*/
 		UA_UInt16 timeout = UA_Server_run_iterate(server, waitInternal);
 		count++;
-		//if(count%85000==0)
 		writeVariable(server);
-		
-		struct timeval tv;
-		tv.tv_sec = 0;
-		tv.tv_usec = timeout * 1000;
-		select(0, NULL, NULL, NULL, &tv);
+		UA_Variant value; /* Variants can hold scalar values and arrays of any type */
+		UA_Variant_init(&value);
+		UA_NodeId nodeId = UA_NODEID_STRING(1, "go");
+		UA_Server_readValue(server, nodeId, &value);
+		UA_Int32 v = *(UA_Int32 *)value.data;
+		cout << v << endl;
 	}
 	retval = UA_Server_run_shutdown(server);
-
-cleanup:
 	UA_Server_delete(server);
 	UA_ServerConfig_delete(config);
-	return (int)retval;
+	return ;
+}
+int main(void) {
+	
+			thread t(network);
+			system("pause");
+			running = 0;
+			t.join();
+	return 0;
 }
 
